@@ -1,0 +1,30 @@
+seed = 0
+
+[data]
+T_cache = true
+path = "data/News/mnar_0.5"
+
+[data.T]
+normalization = "quantile"
+
+[model]
+num_embedding_arch = [
+    "linear",
+    "relu",
+]
+d_num_embedding = 328
+
+[model.transformer]
+residual_dropout = 0.0
+n_blocks = 1
+attention_dropout = 0.30138168803582194
+ffn_d_hidden_factor = 1.7564330326604605
+ffn_dropout = 0.21182739966945235
+
+[training]
+batch_size = 256
+lr = 0.00019578897201212982
+weight_decay = 7.501954443620125e-06
+
+[bins]
+count = 229

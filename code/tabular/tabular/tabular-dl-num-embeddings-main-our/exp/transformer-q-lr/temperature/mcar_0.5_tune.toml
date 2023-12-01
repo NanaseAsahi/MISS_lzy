@@ -1,0 +1,95 @@
+
+seed = 0
+program = "optuna_train5.py"
+n_trials = 50
+
+[base_config]
+seed = 0
+
+[base_config.data]
+T_cache = true
+dataset = "News"
+type = "mcar_"
+missingrate = 0.5
+path = "data/HI/mcar_0.5"
+
+[base_config.data.T]
+normalization = "quantile"
+
+[base_config.model]
+num_embedding_arch = [
+    "linear",
+    "relu",
+]
+
+[base_config.model.transformer]
+residual_dropout = 0.0
+
+[base_config.training]
+batch_size = 256
+weight_decay = 7.501954443620125e-06
+[space.data]
+ips_num = [
+    "discrete_uniform",
+    20,
+    200,
+    20,
+
+]
+mask_rate = [
+    "uniform",
+    0.0,
+    0.3,
+]
+[space.model]
+d_num_embedding = [
+    "int",
+    328,
+    328,
+    8,
+]
+l1 = [
+    "uniform",
+    0.0,
+    20,
+]
+l2 = [
+    "uniform",
+    0.0,
+    20,
+]
+[space.model.transformer]
+n_blocks = [
+    "int",
+    1,
+    1,
+]
+attention_dropout = [
+    "uniform",
+    0.30138168803582194,
+    0.30138168803582194,
+]
+ffn_d_hidden_factor = [
+    "uniform",
+    1.7564330326604605,
+    1.7564330326604605,
+]
+ffn_dropout = [
+    "uniform",
+    0.21182739966945235,
+    0.21182739966945235,
+]
+
+[space.training]
+lr = [
+    "loguniform",
+    0.00019578897201212982,
+    0.00019578897201212982,
+]
+
+[space.bins]
+count = [
+    "int",
+    229,
+    229,
+]
