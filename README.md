@@ -1,6 +1,3 @@
-The running environment requirements are in requirements.txt
-
-You can use scripts in /scripts to run all the experiments
 # Title: Semi-supervised Learning with Missingness Mechanism Modeling for Predicting Incomplete Tabular Data
 ## Introduction
 
