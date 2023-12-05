@@ -19,14 +19,14 @@ import json
 import pandas as pd
 from IPS import sampling, compute_ips
 #设定缺失率及数据集
-missingrates = [0.5]
-mul_datasets = []
+missingrates = [0.1, 0.3, 0.5, 0.7, 0.9]
+mul_datasets = ["gas"]
 reg_datasets = ["temperature"]
-bi_datasets = []
-missingtypes = [ "mnar_p_","mar_p_"]
+bi_datasets = ["HI", "News"]
+missingtypes = ["mcar_", "mar_p_", "mnar_p_"]
 
-ips_nums = [60]
-seeds = [0]
+ips_nums = [40]
+seeds = [0, 149669, 52983]
 best_valid_accuracy_list = []
 best_test_accuracy_list = []
 best_test_auroc_list = []

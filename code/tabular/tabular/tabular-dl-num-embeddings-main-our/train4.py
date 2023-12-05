@@ -770,11 +770,11 @@ def pretrain_module(model, x: Tensor, ips, mask):
     return x
 
 
-missingrates = [0.1, 0.3, 0.7, 0.9]
-datasets = ["HI", "News", "temperature"]
+missingrates = [0.1, 0.3, 0.5, 0.7, 0.9]
+datasets = ["HI", "News", "temperature", "gas"]
 missingtypes = ["mcar_", "mar_p_", "mnar_p_"]
 ips_nums = [40]
-seeds = [0]
+seeds = [0, 149669, 52983]
 imputations = ["mean"]
 # missingrates = [0.5]
 # bi_datasets = ["News"]

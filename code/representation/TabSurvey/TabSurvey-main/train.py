@@ -147,9 +147,9 @@ class Objective(object):
 
 def main_once(args):
     seeds = [0, 149669, 52983]
-    datasets = ["gas"]
-    missing_rate = [0.5]
-    types = ["mcar_"]
+    datasets = ["HI", "News", "temperature", "gas"]
+    missing_rate = [0.1, 0.3, 0.5, 0.7, 0.9]
+    types = ["mcar_", "mar_p_", "mnar_p_"]
     imputations = ["mean"]  # noimp表示不补全，xgboost可以不补全直接运行
     models = ["TabTransformer_our"]
     start_time = 0
