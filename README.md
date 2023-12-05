@@ -22,7 +22,7 @@ pip install -r requirements.txt
 
 All of the original datasets can refer to the links:
 
-  - News: https://www.openml.org/search?type=data&status=active&id=23512&sort=runs      
+  - News: https://archive.ics.uci.edu/dataset/332/online+news+popularity          
   - HI: https://www.openml.org/search?type=data&status=active&id=23512&sort=runs       
   - gas: https://archive.ics.uci.edu/dataset/322/gas+sensor+array+under+dynamic+gas+mixtures   
   - temperature: https://archive.ics.uci.edu/dataset/514/bias+correction+of+numerical+prediction+model+temperature+forecast 
