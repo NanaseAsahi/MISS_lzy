@@ -1,4 +1,4 @@
-# Title: Semi-supervised Learning with Missingness Mechanism Modeling for Predicting Incomplete Tabular Data
+# Title: MISS: An Incomplete Tabular Data Representation System with Missing Mechanism Learning
 ## Introduction
 
 This folder (i.e., ./code) holds the source codes of the proposed system MISS on top of the four transformer-based models, including
