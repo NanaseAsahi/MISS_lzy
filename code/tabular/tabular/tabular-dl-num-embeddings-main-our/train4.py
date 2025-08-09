@@ -20,6 +20,9 @@ import lib
 import json
 from IPS import sampling, compute_ips
 import torch.optim as optim
+
+# added by lzy 7.31
+import os
 # %%
 @dataclass
 class FourierFeaturesOptions:
@@ -435,34 +438,48 @@ class BaseModel(nn.Module):
 class FlatModel(BaseModel):
     def __init__(self, config: Config, dataset, n_bins: Optional[int]):
         super().__init__(config, dataset, n_bins)
+        # 数值特征的输入维度
         d_num_embedding = (
             None if self.num_embeddings is None else self.num_embeddings.d_embedding
         )
+
+        # 总输入维度 特征数量 × 每个特征的维度(嵌入使用d_num_embedding, 分箱使用n_bins， 标量使用1)
         d_num_in = D.n_num_features * (d_num_embedding or n_bins or 1)
+
+        # 一种特征变换 将原始数值特征映射到高维的三角函数空间
         if config.model.fourier_features is not None:
             assert self.num_embeddings is None
             assert d_num_in
             self.fourier_matrix = nn.Linear(
                 d_num_in, config.model.fourier_features.n, False
             )
+
+            # 正态分布初始化权重
             nn.init.normal_(
                 self.fourier_matrix.weight,
                 std=config.model.fourier_features.sigma ** 2,
             )
+            
             self.fourier_matrix.weight.requires_grad_(False)
             d_num_in = config.model.fourier_features.n * 2
         else:
             self.fourier_matrix = None
+        
+        # 分类特征的输入维度
         d_cat_in = (
             sum(self.category_sizes)
             if config.model.d_cat_embedding is None
             else len(self.category_sizes) * config.model.d_cat_embedding
         )
         assert isinstance(d_cat_in, int)
+
+        # 配置主干网络
         in_out_options = {
             'd_in': d_num_in + d_cat_in,
             'd_out': dataset.nn_output_dim,
         }
+
+        # 选择主干网络
         if config.is_mlp:
             self.main_module = rtdl_our.MLP.make_baseline(
                 **config.model.mlp, **in_out_options  # type: ignore[code]
@@ -529,6 +546,7 @@ class NonFlatModel(BaseModel):
         super().__init__(config, dataset, n_bins)
         assert config.model.transformer is not None
         assert self.num_embeddings is not None
+        
         transformer_options = deepcopy(config.model.transformer)
         if config.model.transformer_default:
             transformer_options = (
@@ -744,7 +762,9 @@ def save_checkpoint():
 criterion1 = nn.CrossEntropyLoss()
 criterion2 = nn.MSELoss()
 criterion3 = nn.LogSoftmax(dim=1)
+
 def pretrain_module(model, x: Tensor, ips, mask):
+    # 遍历每一层
     for layer_idx, layer in enumerate(model.main_module.blocks):
         layer = cast(nn.ModuleDict, layer)
 
@@ -759,6 +779,8 @@ def pretrain_module(model, x: Tensor, ips, mask):
             mask,
             *model.main_module._get_kv_compressions(layer),
         )
+
+        # 根据query_index选择Q
         if query_idx is not None:
             x = x[:, query_idx]
         x = model.main_module._end_residual(layer, 'attention', x, x_residual)
@@ -773,6 +795,7 @@ def pretrain_module(model, x: Tensor, ips, mask):
 missingrates = [0.1, 0.3, 0.5, 0.7, 0.9]
 datasets = ["HI", "News", "temperature", "gas"]
 missingtypes = ["mcar_", "mar_p_", "mnar_p_"]
+# missingtypes = ["mnar_p_"]
 ips_nums = [40]
 seeds = [0, 149669, 52983]
 imputations = ["mean"]
@@ -787,13 +810,21 @@ all_result = []
 t = time.localtime()
 t_time = str(t.tm_mon) + "_" + str(t.tm_mday) + "_" + str(t.tm_hour) + "_" + str(t.tm_min)
 if __name__ == "__main__":
+    # datasets = ["HI", "News", "temperature", "gas"]
     for data_name in datasets:
+        # missingrates = [0.1, 0.3, 0.5, 0.7, 0.9]
         for missingrate in missingrates:
+            # missingtypes = ["mcar_", "mar_p_", "mnar_p_"]
             for missingtype in missingtypes:
+                # imputations = ["mean"]
                 for imp in imputations:
+                    # ips_nums = [40]
                     for ips_num in ips_nums:
+                        # seeds = [0, 149669, 52983]
                         for seed in seeds:
                             start_time = time.time()
+
+                            # 读取.toml配置文件 完成对C所有属性的赋值 可能影响out
                             if missingtype == "mnar_p_":
                                 config_path = "exp/transformer-q-lr/" + data_name + "/" + "mnar_" + str(
                                     0.5) + ".toml"
@@ -803,47 +834,84 @@ if __name__ == "__main__":
                             else:
                                 config_path = "exp/transformer-q-lr/" + data_name + "/" + "mcar_" + str(
                                     0.5) + ".toml"
+                                
                             C, output, report = lib.start(Config, patch_raw_config=patch_raw_config,
                                                           config_path=config_path)
+                            
                             if imp != "mean":
                                 C.data.path = "data/" + data_name + "/" + missingtype + imp + str(missingrate)
                             else:
                                 C.data.path = "data/" + data_name + "/" + missingtype + str(missingrate)
 
+                            """
+                            added by lzy 7.31
+                            sh scripts/tabular.sh
+                            调试工作路径
+
+                            output:
+                            当前工作目录: /data/lzy/MISS2
+                            相对路径: data/HI/mcar_0.1
+                            绝对路径: /data/lzy/MISS2/data/HI/mcar_0.1
+                            """
+                            # print(f"当前工作目录: {os.getcwd()}")
+                            # print(f"相对路径: {C.data.path}")
+                            # print(f"绝对路径: {Path(C.data.path).resolve()}")
+
+                            # out = Path(
+                            #     "/data/lsw/data/data/" + C.data.dataset + "/" + C.data.type + C.data.dataset + "_" + str(
+                            #         C.data.missingrate) + ".csv")
+
+                            # 数据集路径
                             out = Path(
-                                "/data/lsw/data/data/" + C.data.dataset + "/" + C.data.type + C.data.dataset + "_" + str(
+                                "/home/lzy/data/MISS2/dataset/" + C.data.dataset + "/" + C.data.type + C.data.dataset + "_" + str(
                                     C.data.missingrate) + ".csv")
+                            
                             random.seed(0)
                             np.random.seed(0)
+                            
+                            # 获取设备
+                            zero.improve_reproducibility(seed)
+                            device = lib.get_device()
+
+                            # 读入数据
                             data = pd.read_csv(out)
                             X = data.iloc[:, :-1]
-                            nan_mask = pd.isna(X).to_numpy()
-                            nan_mask = torch.tensor(nan_mask)
+
+                            nan_mask = pd.isna(X).to_numpy() # 缺失值mask
+                            nan_mask = torch.tensor(nan_mask, device=device)  # 添加device参数
                             X = pd.DataFrame(X)
+
                             nunique = X.nunique()
+
                             types = X.dtypes
-                            categorical_indicator = list(np.zeros(X.shape[1]).astype(bool))
+
+                            categorical_indicator = list(np.zeros(X.shape[1]).astype(bool))  # 识别每列是否为离散特征
                             for col in X.columns:
                                 if types[col] == 'object' or nunique[col] < 100:
                                     categorical_indicator[X.columns.get_loc(col)] = True
 
                             categorical_columns = X.columns[
                                 list(np.where(np.array(categorical_indicator) == True)[0])].tolist()
-                            cont_columns = list(set(X.columns.tolist()) - set(categorical_columns))
+                            
+                            cont_columns = list(set(X.columns.tolist()) - set(categorical_columns))  # 获得连续特征
 
                             cat_idxs = list(np.where(np.array(categorical_indicator) == True)[0])
                             con_idxs = list(set(range(len(X.columns))) - set(cat_idxs))
+                            
+                            # 为所有样本生成一个标注
                             X["Set"] = np.random.choice(["train", "valid", "test"], p=[.8, .1, .1], size=(X.shape[0],))
+
                             datafull = pd.read_csv(
-                                Path("/data/lsw/data/data/" + C.data.dataset + "/" + "mcar_" + C.data.dataset + "_" + str(
+                                Path("/home/lzy/data/MISS2/dataset/" + C.data.dataset + "/" + "mcar_" + C.data.dataset + "_" + str(
                                     0.0) + ".csv"))
                             datamiss = pd.read_csv(out)
-                            # 标记专家数据
+                            
                             datamiss, indicator = sampling(datafull, datamiss, C.data.ipsnum, method='feature')
                             ips = compute_ips(datamiss[:, :-1], indicator[:, :-1], num=C.data.ipsnum, method='xgb')
-                            ips = torch.tensor(ips)
+                            ips = torch.tensor(ips, device=device)  # 添加device参数
                             softm = nn.Softmax(dim=1)
                             ips = softm(ips)
+                            
                             cat_ips = ips[:, cat_idxs]
                             num_ips = ips[:, con_idxs]
                             cat_nan_mask = nan_mask[:, cat_idxs]
@@ -863,26 +931,79 @@ if __name__ == "__main__":
                                                  'test': cat_nan_mask[test_index, :]}
                             # %%
                             # %%
-                            zero.improve_reproducibility(seed)
-                            device = lib.get_device()
+                            # 构建数据集对象 D，包含特征、标签等
                             D = lib.build_dataset(C.data.path, C.data.T, C.data.T_cache, cat_nan_mask_dict)
+                            
+                            """
+                            lzy begin
+                            两套数据划分的方式有冲突
+                            对划分方式进行修正
+                            """
+                            # 检查并修正索引一致性问题
+                            for part in ['train', 'test', 'val']:
+                                expected_size = D.size(part)
+                                actual_size = len(num_nan_mask_dict[part])
+                                
+                                if expected_size != actual_size:
+                                    print(f"WARNING: Size mismatch for {part}: expected {expected_size}, got {actual_size}")
+                                    # 截断或填充到正确大小
+                                    if expected_size < actual_size:
+                                        # 截断 - 保持tensor类型
+                                        num_nan_mask_dict[part] = num_nan_mask_dict[part][:expected_size]
+                                        cat_nan_mask_dict[part] = cat_nan_mask_dict[part][:expected_size]
+                                        num_ips_dict[part] = num_ips_dict[part][:expected_size]
+                                        cat_ips_dict[part] = cat_ips_dict[part][:expected_size]
+                                    else:
+                                        # 填充（使用最后一个样本重复） - 使用torch操作保持tensor类型
+                                        deficit = expected_size - actual_size
+                                        
+                                        # 获取最后一个样本并重复
+                                        last_num_mask = num_nan_mask_dict[part][-1:].repeat(deficit, 1)
+                                        last_cat_mask = cat_nan_mask_dict[part][-1:].repeat(deficit, 1)
+                                        last_num_ips = num_ips_dict[part][-1:].repeat(deficit, 1)
+                                        last_cat_ips = cat_ips_dict[part][-1:].repeat(deficit, 1)
+                                        
+                                        # 使用torch.cat拼接
+                                        num_nan_mask_dict[part] = torch.cat([num_nan_mask_dict[part], last_num_mask], dim=0)
+                                        cat_nan_mask_dict[part] = torch.cat([cat_nan_mask_dict[part], last_cat_mask], dim=0)
+                                        num_ips_dict[part] = torch.cat([num_ips_dict[part], last_num_ips], dim=0)
+                                        cat_ips_dict[part] = torch.cat([cat_ips_dict[part], last_cat_ips], dim=0)
+                            """
+                            lzy end
+                            """
+
+                    
                             report['prediction_type'] = None if D.is_regression else 'logits'
                             lib.dump_pickle(D.y_info, output / 'y_info.pickle')
 
+
+                            """
+                            分箱 begins
+                            直接使用数值求embedding 不同数之间的embedding向量差异可能很大
+                            分箱后降低对此类情况的敏感度，鲁棒性更好
+                            """
                             if C.bins is None:
                                 bin_edges = None
                                 bins = None
                                 bin_values = None
                                 n_bins = None
                             else:
+                                # 对数值型特征进行分箱
                                 print('\nRunning bin-based encoding...')
                                 assert D.X_num is not None
                                 bin_edges = []
+
+                                # 初始化存储分箱结果的字典，分别为不同数据集部分（如'train', 'val', 'test'）
                                 _bins = {x: [] for x in D.X_num}
                                 _bin_values = {x: [] for x in D.X_num}
+
                                 rng = np.random.default_rng(seed)
+
+                                # 遍历每一个数值型特征
                                 for feature_idx in trange(D.n_num_features):
                                     train_column = D.X_num['train'][:, feature_idx].copy()
+
+                                    # 如果设置了子采样（subsample），则只用部分数据分箱 实际未使用
                                     if C.bins.subsample is not None:
                                         subsample_n = (
                                             C.bins.subsample
@@ -895,6 +1016,7 @@ if __name__ == "__main__":
                                         subsample_idx = None
 
                                     if C.bins.tree is not None:
+                                        # 注意，这里_y实际上是label，但后续从没有用上过
                                         _y = D.y['train']
                                         if subsample_idx is not None:
                                             _y = _y[subsample_idx]
@@ -902,47 +1024,56 @@ if __name__ == "__main__":
                                             (DecisionTreeRegressor if D.is_regression else DecisionTreeClassifier)(
                                                 max_leaf_nodes=C.bins.count, **C.bins.tree
                                             )
-                                            .fit(train_column.reshape(-1, 1), D.y['train'])
-                                            .tree_
+
+                                            # 实际应该是.fit(train_column.reshape(-1, 1), _y)
+                                            # .fit(train_column.reshape(-1, 1), D.y['train'])
+                                            .fit(train_column.reshape(-1, 1), _y)
+                                            .tree_  # 获取树的底层实现
                                         )
                                         del _y
                                         tree_thresholds = []
                                         for node_id in range(tree.node_count):
                                             # the following condition is True only for split nodes
                                             # See https://scikit-learn.org/stable/auto_examples/tree/plot_unveil_tree_structure.html#sphx-glr-auto-examples-tree-plot-unveil-tree-structure-py
+                                            # 只收集分裂节点（对分类有贡献）的阈值
                                             if tree.children_left[node_id] != tree.children_right[node_id]:
                                                 tree_thresholds.append(tree.threshold[node_id])
                                         tree_thresholds.append(train_column.min())
                                         tree_thresholds.append(train_column.max())
-                                        bin_edges.append(np.array(sorted(set(tree_thresholds))))
+                                        bin_edges.append(np.array(sorted(set(tree_thresholds))))  # 对于每个feature都有，故最终bin-edges中有n_features个元素
                                     else:
+                                        # 直接使用分位数进行分箱
                                         feature_n_bins = min(C.bins.count, len(np.unique(train_column)))
                                         quantiles = np.linspace(
                                             0.0, 1.0, feature_n_bins + 1
                                         )  # includes 0.0 and 1.0
                                         bin_edges.append(np.unique(np.quantile(train_column, quantiles)))
 
-                                    for part in D.X_num:
+
+                                    # 生成分箱编号
+                                    for part in D.X_num:  # 遍历数据集的每个部分（如'train', 'val', 'test'）
                                         _bins[part].append(
-                                            np.digitize(
-                                                D.X_num[part][:, feature_idx],
-                                                np.r_[-np.inf, bin_edges[feature_idx][1:-1], np.inf],
+                                            np.digitize(  # 将连续值分配到对应的分箱区间
+                                                D.X_num[part][:, feature_idx],  # 需要分箱的数值，按照分箱的范围返回一个代表分箱编号的数组
+                                                np.r_[-np.inf, bin_edges[feature_idx][1:-1], np.inf],  # 按行拼接 参数含义为分箱的范围
                                             ).astype(np.int32)
-                                            - 1
+                                            - 1  # 使得分箱编号从0开始
                                         )
-                                        if C.bins.encoding == 'binary':
-                                            _bin_values[part].append(np.ones_like(D.X_num[part][:, feature_idx]))
-                                        elif C.bins.encoding == 'piecewise-linear':
+
+                                        # 不同的分箱编码方式 
+                                        if C.bins.encoding == 'binary':  # 对每个样本，分箱后的特征值都设为 1。这种编码方式通常用于 one-hot 编码等场景，表示“该样本属于某个分箱”即可，不关心具体数值。
+                                            _bin_values[part].append(np.ones_like(D.X_num[part][:, feature_idx]))  # 所有_bin_values值都是1,即代表所有样本都在分箱中
+                                        elif C.bins.encoding == 'piecewise-linear':  # 代表样本在具体哪个分箱中
                                             feature_bin_sizes = (
-                                                    bin_edges[feature_idx][1:] - bin_edges[feature_idx][:-1]
+                                                    bin_edges[feature_idx][1:] - bin_edges[feature_idx][:-1]  # 这个feature对应的相邻两个分箱边界之间的距离，即每个分箱区间的宽度
                                             )
-                                            part_feature_bins = _bins[part][feature_idx]
-                                            _bin_values[part].append(
+                                            part_feature_bins = _bins[part][feature_idx]  # _bins 分箱编号
+                                            _bin_values[part].append(  # 约等于归一化
                                                 (
-                                                        D.X_num[part][:, feature_idx]
-                                                        - bin_edges[feature_idx][part_feature_bins]
+                                                        D.X_num[part][:, feature_idx]  # 真实值
+                                                        - bin_edges[feature_idx][part_feature_bins]  # 分箱边界值
                                                 )
-                                                / feature_bin_sizes[part_feature_bins]
+                                                / feature_bin_sizes[part_feature_bins]  # 分箱长度
                                             )
                                         else:
                                             assert C.bins.encoding == 'one-blob'
@@ -967,6 +1098,10 @@ if __name__ == "__main__":
                                 lib.dump_pickle(bin_edges, output / 'bin_edges.pickle')
                                 bin_edges = [torch.tensor(x, dtype=torch.float32, device=device) for x in bin_edges]
                                 print()
+                            """
+                            分箱 ends
+                            得到 bins 和 bin_values
+                            """
 
                             X_num, X_cat, Y = lib.prepare_tensors(D, device=device)
                             if C.bins is not None and C.bins.encoding != 'one-blob':
@@ -974,7 +1109,9 @@ if __name__ == "__main__":
                                 X_num = None
 
                             zero.hardware.free_memory()
+
                             loss_fn = lib.get_loss_fn(D.task_type)
+
                             model = (FlatModel if C.is_mlp or C.is_resnet else NonFlatModel)(C, D, n_bins).to(
                                 device
                             )
@@ -982,30 +1119,41 @@ if __name__ == "__main__":
                             #     print('Using nn.DataParallel')
                             #     model = nn.DataParallel(model)  # type: ignore[code]
                             report['n_parameters'] = lib.get_n_parameters(model)
+
                             optimizer = lib.make_optimizer(
                                 asdict(C.training), lib.split_parameters_by_weight_decay(model)
                             )
+
                             stream = zero.Stream(
                                 zero.data.IndexLoader(D.size('train'), C.training.batch_size, True, device=device)
                             )
+
                             report['epoch_size'] = math.ceil(D.size('train') / C.training.batch_size)
-                            progress = zero.ProgressTracker(C.training.patience)
+ 
+                            progress = zero.ProgressTracker(C.training.patience)  # 早停监控
                             progress_pretrain = zero.ProgressTracker(C.training.patience)
                             training_log = {}
                             checkpoint_path = output / 'checkpoint.pt'
                             eval_batch_size = C.training.eval_batch_size
                             chunk_size = None
+
+                            # 记录训练中的最小值
                             min_pretrain_loss = float("inf")
                             min_pretrain_loss_idx = 0
+                            
                             test_acc_list = []
                             timer = lib.Timer.launch()
+
                             for epoch in stream.epochs(20):
                                 loss = 0
                                 running_loss = 0
                                 epoch_losses = []
+
                                 pretrain_optimizer = optim.AdamW(lib.split_parameters_by_weight_decay(model), lr=0.0001)
+
                                 for batch_idx in epoch:
                                     optimizer.zero_grad()
+
                                     if X_cat is not None:
                                         batch_X_cat = X_cat['train'][batch_idx]
                                         cat_mask = cat_nan_mask_dict['train'][batch_idx]
@@ -1017,14 +1165,23 @@ if __name__ == "__main__":
 
                                     num_ips = num_ips_dict['train'][batch_idx]
 
+
+                                    # 合并两种特征
                                     if X_cat is not None:
                                         ips = torch.concat([num_ips, cat_ips], 1)
                                         mask = torch.concat([num_mask, cat_mask], 1)
                                     else:
                                         ips = num_ips
                                         mask = num_mask
+                                        
+                                    # 移除最后一列   
                                     ips = ips[:, :-1]
                                     mask = mask[:, :-1]
+                                    
+                                    # 确保ips和mask在正确的设备上
+                                    ips = ips.to(device)
+                                    mask = mask.to(device)
+
                                     x = model._encode_input((
                                         encode('train', batch_idx)
                                         if C.bins is not None
@@ -1033,7 +1190,10 @@ if __name__ == "__main__":
                                         else None
                                     ),
                                         None if X_cat is None else X_cat['train'][batch_idx], )
+
                                     x = torch.concat([x_ for x_ in x if x_ is not None], 1)
+                                    
+                                    # 对比学习 使得模型学习稳定的特征表示 同一样本经过两次不同的前向传播也应该得到相似的特征表示
                                     aug_features_1 = pretrain_module(model, x, ips, mask)
                                     aug_features_2 = pretrain_module(model, x, ips, mask)
                                     aug_features_1 = (
@@ -1044,15 +1204,20 @@ if __name__ == "__main__":
                                                                                                                     2)
                                     aug_features_1 = model.pt_mlp(aug_features_1)
                                     aug_features_2 = model.pt_mlp(aug_features_2)
-                                    nce_temp = 0.7
+                                    # nce_temp = 0.7  # 原
+                                    nce_temp = torch.tensor(0.7, device=aug_features_1.device, dtype=torch.float32)
                                     logits_per_aug1 = aug_features_1 @ aug_features_2.t() / nce_temp
                                     logits_per_aug2 = aug_features_2 @ aug_features_1.t() / nce_temp
                                     targets = torch.arange(logits_per_aug1.size(0)).to(logits_per_aug1.device)
                                     # print(logits_per_aug1.shape)
                                     # print(targets)
-                                    loss_1 = criterion1(logits_per_aug1, targets)
+                                    loss_1 = criterion1(logits_per_aug1, targets)  # 交叉熵
                                     loss_2 = criterion1(logits_per_aug2, targets)
-                                    loss = 1 * (loss_1 + loss_2) / 2
+                                    # loss = 1 * (loss_1 + loss_2) / 2  # 原
+
+                                    # 对比学习损失
+                                    loss = (loss_1 + loss_2) / torch.tensor(2.0, device=loss_1.device, dtype=torch.float32)
+
                                     outs = pretrain_module(model, x, ips, mask)
                                     con_outs = outs[:, :D.n_num_features]
                                     if X_cat is not None:
@@ -1061,19 +1226,30 @@ if __name__ == "__main__":
                                     con_outs = model.mlp2(con_outs)
                                     if len(con_outs) > 0:
                                         con_outs = torch.cat(con_outs, dim=1)
-                                        l2 = criterion2(con_outs[num_mask == 0], batch_X_num[num_mask == 0])
+                                        l2 = criterion2(con_outs[num_mask == 0], batch_X_num[num_mask == 0])  # MSE
                                     else:
-                                        l2 = 0
-                                    l1 = 0
+                                        # l2 = 0  # 原
+                                        l2 = torch.tensor(0.0, device=batch_X_num.device, dtype=torch.float32)
+                                        
+                                    l1 = torch.tensor(0.0, device=batch_X_num.device, dtype=torch.float32)                                      
+                                    # l1 = 0  # 原
+
                                     # import ipdb; ipdb.set_trace()
                                     if X_cat is not None:
                                         n_cat = batch_X_cat.shape[-1]
                                         for j in range(1, n_cat):
-                                            log_x = criterion3(cat_outs[j])
+                                            log_x = criterion3(cat_outs[j]) 
                                             log_x = log_x[range(cat_outs[j].shape[0]), batch_X_cat[:, j]]
-                                            log_x[cat_mask[:, j] == 1] = 0
-                                            l1 += abs(sum(log_x) / cat_outs[j].shape[0])
-                                    loss += 1 * l1 + 1 * l2
+                                            # log_x[cat_mask[:, j] == 1] = 0  # 原
+
+                                            # 避免原地操作，使用torch.where替代
+                                            mask_condition = (cat_mask[:, j] == 1).to(log_x.device)  # 将条件转换为与log_x相同的设备
+                                            log_x = torch.where(mask_condition, torch.tensor(0.0, device=log_x.device, dtype=log_x.dtype), log_x) #lzy
+
+                                            # l1 += abs(sum(log_x) / cat_outs[j].shape[0])  # 原
+                                            l1 += torch.abs(torch.sum(log_x) / torch.tensor(cat_outs[j].shape[0], device=log_x.device, dtype=torch.float32))
+                                    # loss += 1 * l1 + 1 * l2  # 原
+                                    loss = loss + l1 + l2  # lzy
                                     loss.backward()
                                     optimizer.step()
                                     running_loss += loss.item()
@@ -1150,6 +1326,10 @@ if __name__ == "__main__":
                             # ,"pretrain_epoch": pretrain_epoch,"pretrain_loss_con": pretrain_loss_con,"pretrain_loss_deno": pretrain_loss_deno,"pretrain_loss": pretrain_loss}
 
                             all_result.append(result)
-                            out = Path("/data/lsw/result/tabular_allresult" + t_time + ".json")
+                            # out = Path("/data/lsw/result/tabular_allresult" + t_time + ".json")
+                            out = Path("/home/lzy/data/MISS2/result/tabular_allresult" + t_time + ".json")
+                            
+                            # 自动创建目录（如果不存在）
+                            out.parent.mkdir(parents=True, exist_ok=True)            
                             with open(out, "w") as f:
                                 json.dump(all_result, f, indent=4)

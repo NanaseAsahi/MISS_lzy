@@ -3,10 +3,10 @@ seed = 0
 [data]
 T_cache = true
 dataset = "temperature"
-type = "mar_"
+type = "mar_p_"
 missingrate = 0.5
 ipsnum = 40
-path = "data/temperature/mar_0.5"
+path = "data/temperature/mar_p_0.5"
 
 [data.T]
 normalization = "quantile"

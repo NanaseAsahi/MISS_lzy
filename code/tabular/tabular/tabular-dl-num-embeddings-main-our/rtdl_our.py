@@ -856,86 +856,110 @@ class MultiheadAttention(nn.Module):
         )
 
     def forward(
-        self,
-        x_q: Tensor,
-        x_kv: Tensor,
-        ips,
-        mask,
-        key_compression: Optional[nn.Linear],
-        value_compression: Optional[nn.Linear],
+            self,
+            x_q: Tensor,
+            x_kv: Tensor,
+            ips,
+            mask,
+            key_compression: Optional[nn.Linear],
+            value_compression: Optional[nn.Linear],
+        ) -> Tuple[Tensor, Dict[str, Tensor]]:
+            """Perform the forward pass.
 
-    ) -> Tuple[Tensor, Dict[str, Tensor]]:
-        """Perform the forward pass.
+            Args:
+                x_q: query tokens
+                x_kv: key-value tokens
+                key_compression: Linformer-style compression for keys
+                value_compression: Linformer-style compression for values
+            Returns:
+                (tokens, attention_stats)
+            """
+            _all_or_none([key_compression, value_compression])
+            q, k, v = self.W_q(x_q), self.W_k(x_kv), self.W_v(x_kv)
+            for tensor in [q, k, v]:
+                assert tensor.shape[-1] % self.n_heads == 0
+            if key_compression is not None:
+                k = key_compression(k.transpose(1, 2)).transpose(1, 2)
+                v = value_compression(v.transpose(1, 2)).transpose(1, 2)  # type: ignore
 
-        Args:
-            x_q: query tokens
-            x_kv: key-value tokens
-            key_compression: Linformer-style compression for keys
-            value_compression: Linformer-style compression for values
-        Returns:
-            (tokens, attention_stats)
-        """
-        _all_or_none([key_compression, value_compression])
-        q, k, v = self.W_q(x_q), self.W_k(x_kv), self.W_v(x_kv)
-        for tensor in [q, k, v]:
-            assert tensor.shape[-1] % self.n_heads == 0
-        if key_compression is not None:
-            k = key_compression(k.transpose(1, 2)).transpose(1, 2)
-            v = value_compression(v.transpose(1, 2)).transpose(1, 2)  # type: ignore
+            batch_size = len(q)
+            d_head_key = k.shape[-1] // self.n_heads
+            d_head_value = v.shape[-1] // self.n_heads
+            n_q_tokens = q.shape[1]
 
-        batch_size = len(q)
-        d_head_key = k.shape[-1] // self.n_heads
-        d_head_value = v.shape[-1] // self.n_heads
-        n_q_tokens = q.shape[1]
+            q = self._reshape(q)
+            k = self._reshape(k)
+            attention_logits = q @ k.transpose(1, 2) / math.sqrt(d_head_key)
+            attention_logits = rearrange(attention_logits, '(b h) i j -> b h i j', h=self.n_heads)
+            mask = ~mask
+            
+            # 调整ips和mask的维度匹配
+            ones = torch.ones((ips.shape[0], 1), device=ips.device)
+            if(ips.shape[1] != attention_logits.shape[3]):
+                ips = torch.cat([ips, ones], axis=1)
+                mask = torch.cat([mask, ones.bool()], axis=1)
+                
+            # 检查每一行是否都为True
+            array = mask.cpu().numpy()  # 先移到CPU再转numpy
+            all_true = np.all(array, axis=1)
+            all_true_index = torch.tensor(all_true, device=ips.device)  # 指定设备
+            
+            # 移动到与attention_logits相同的设备
+            ips = ips.to(attention_logits.device)
+            mask = mask.to(attention_logits.device)
+            
+            old_attention_logits = attention_logits
 
-        q = self._reshape(q)
-        k = self._reshape(k)
-        attention_logits = q @ k.transpose(1, 2) / math.sqrt(d_head_key)
-        attention_logits = rearrange(attention_logits, '(b h) i j -> b h i j', h=self.n_heads)
-        # print("newww", key_padding_mask.shape)
-        # print(key_padding_mask)
-        mask = ~mask
-        # print("sim", sim.shape, ips.shape)
-        # print(key_padding_mask)
-        ones = torch.ones((ips.shape[0], 1))
-        if(ips.shape[1] != attention_logits.shape[3]):
-            ips = torch.cat([ips, ones], axis=1)
-            mask = torch.cat([mask, ones.bool()], axis=1)
-        array = mask.numpy()
-        # mask = ~mask
+            # IPS标准化
+            # 根据发现：方差膨胀 = Var(ips) + E[ips]²
+            ips_mean = ips.mean()
+            ips_std = ips.std() + 1e-8  # 避免除零
+            
+            # 最普通的标准化：转为均值0，方差1的分布
+            ips_standardized = (ips - ips_mean) / ips_std
+            
+            # 调整为以1为中心的分布，避免负权重
+            ips_adjusted = 1.0 + 0.2 * ips_standardized  # 0.2是调节强度
+            ips_adjusted = ips_adjusted.unsqueeze(1).unsqueeze(2)  # 调整维度用于广播
+            
+            
+            # 应用方差标准化的IPS权重
+            attention_logits = attention_logits * ips_adjusted
+            attention_logits = attention_logits.masked_fill(
+                mask.unsqueeze(1).unsqueeze(2),
+                float("-inf"),
+            )
+            attention_logits = attention_logits.float()
 
-        # 检查每一行是否都为True
-        all_true = np.all(array, axis=1)
-        all_true_index = torch.tensor(all_true)
-        ips = ips.cuda()
-        mask = mask.cuda()
-        ips = ips.unsqueeze(1).unsqueeze(2)
-        old_attention_logits = attention_logits
-        # attention_logits = attention_logits * ips
-        # attention_logits = attention_logits.masked_fill(
-        #     mask.unsqueeze(1).unsqueeze(2),
-        #     float("-inf"),
-        # )
-        attention_logits = attention_logits.float()
-        attention_logits[all_true_index] = old_attention_logits[all_true_index]
-        attention_logits = rearrange(attention_logits, 'b h i j ->(b h) i j', h=self.n_heads)
-        attention_probs = F.softmax(attention_logits, dim=-1)
-        # attention_probs[torch.isnan(attention_probs)] = 1.0 / attention_probs.shape[-1]
-        attention_probs = attention_probs.float()
-        if self.dropout is not None:
-            attention_probs = self.dropout(attention_probs)
-        x = attention_probs @ self._reshape(v)
-        x = (
-            x.reshape(batch_size, self.n_heads, n_q_tokens, d_head_value)
-            .transpose(1, 2)
-            .reshape(batch_size, n_q_tokens, self.n_heads * d_head_value)
-        )
-        if self.W_out is not None:
-            x = self.W_out(x)
-        return x, {
-            'attention_logits': attention_logits,
-            'attention_probs': attention_probs,
-        }
+            # 恢复完整数据的原始logits
+            attention_logits[all_true_index] = old_attention_logits[all_true_index]
+            attention_logits = rearrange(attention_logits, 'b h i j ->(b h) i j', h=self.n_heads)
+            
+            attention_probs = F.softmax(attention_logits, dim=-1)
+            
+            # 处理NaN值：避免原地操作，使用torch.where替代
+            nan_mask = torch.isnan(attention_probs)
+            replacement_value = torch.tensor(1.0, device=attention_probs.device, dtype=attention_probs.dtype) / attention_probs.shape[-1]
+            attention_probs = torch.where(nan_mask, replacement_value, attention_probs)
+
+            attention_probs = attention_probs.float()
+
+            if self.dropout is not None:
+                attention_probs = self.dropout(attention_probs)
+
+            x = attention_probs @ self._reshape(v)
+            
+            x = (
+                x.reshape(batch_size, self.n_heads, n_q_tokens, d_head_value)
+                .transpose(1, 2)
+                .reshape(batch_size, n_q_tokens, self.n_heads * d_head_value)
+            )
+            if self.W_out is not None:
+                x = self.W_out(x)
+            return x, {
+                'attention_logits': attention_logits,
+                'attention_probs': attention_probs,
+            }
 
 
 class Transformer(nn.Module):
@@ -1072,6 +1096,7 @@ class Transformer(nn.Module):
 
         self.blocks = nn.ModuleList([])
         for layer_idx in range(n_blocks):
+            # 预定义后续会用到的block
             layer = nn.ModuleDict(
                 {
                     'attention': MultiheadAttention(
@@ -1094,17 +1119,22 @@ class Transformer(nn.Module):
                     'output': nn.Identity(),  # for hooks-based introspection
                 }
             )
+
+            # 非第一层 or 非预归一化 or 第一层预归一化时
             if layer_idx or not prenormalization or first_prenormalization:
                 layer['attention_normalization'] = _make_nn_module(
                     attention_normalization, d_token
                 )
+
             layer['ffn_normalization'] = _make_nn_module(ffn_normalization, d_token)
+
             if kv_compression_ratio and self.shared_kv_compression is None:
                 layer['key_compression'] = make_kv_compression()
                 if kv_compression_sharing == 'headwise':
                     layer['value_compression'] = make_kv_compression()
                 else:
                     assert kv_compression_sharing == 'key-value'
+
             self.blocks.append(layer)
 
         self.head = Transformer.Head(
@@ -1147,18 +1177,24 @@ class Transformer(nn.Module):
         assert x.ndim == 3
         for layer_idx, layer in enumerate(self.blocks):
             layer = cast(nn.ModuleDict, layer)
-
+            
+            # 只在最后一层使用
             query_idx = (
                 self.last_layer_query_idx if layer_idx + 1 == len(self.blocks) else None
             )
+
             x_residual = self._start_residual(layer, 'attention', x)
+            # call forward() 在 rtdl_our多头注意力中
             x_residual, _ = layer['attention'](
+                # q 如果query_id生效，对齐
                 x_residual if query_idx is None else x_residual[:, query_idx],
+                # kv
                 x_residual,
                 ips,
                 mask,
                 *self._get_kv_compressions(layer),
             )
+
             if query_idx is not None:
                 x = x[:, query_idx]
             x = self._end_residual(layer, 'attention', x, x_residual)
@@ -1380,12 +1416,16 @@ class pretrain_Transformer(nn.Module):
         for layer_idx, layer in enumerate(self.blocks):
             layer = cast(nn.ModuleDict, layer)
 
+            # 只有最后一层生效
             query_idx = (
                 self.last_layer_query_idx if layer_idx + 1 == len(self.blocks) else None
             )
+
             x_residual = self._start_residual(layer, 'attention', x)
             x_residual, _ = layer['attention'](
+                # q
                 x_residual if query_idx is None else x_residual[:, query_idx],
+                # kv
                 x_residual,
                 ips,
                 mask,

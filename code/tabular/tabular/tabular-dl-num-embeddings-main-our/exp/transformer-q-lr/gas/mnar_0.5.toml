@@ -3,10 +3,10 @@ seed = 0
 [data]
 T_cache = true
 dataset = "gas"
-type = "mnar_"
+type = "mnar_p_"
 missingrate = 0.5
 ipsnum = 20
-path = "data/gas/mnar_0.5"
+path = "data/gas/mnar_p_0.5"
 
 [data.T]
 normalization = "quantile"

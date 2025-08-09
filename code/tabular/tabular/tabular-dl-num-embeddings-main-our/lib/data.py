@@ -88,6 +88,7 @@ class Dataset:
         dir_ = Path(dir_)
 
         def load(item) -> ArrayDict:
+            # train: .npy test: .npy val: .npy
             return {
                 x: cast(np.ndarray, np.load(dir_ / f'{item}_{x}.npy'))  # type: ignore[code]
                 for x in ['train', 'val', 'test']
@@ -100,6 +101,7 @@ class Dataset:
             load('X_cat') if dir_.joinpath('X_cat_train.npy').exists() else None,
             load('y'),
             {},
+            # 用于分配损失函数类型
             TaskType(info['task_type']),
             info.get('n_classes'),
             [],
@@ -179,6 +181,7 @@ class Dataset:
             score_key = 'accuracy'
             score_key_2 = 'roc_auc'
             score_sign = 1
+            
         for part_metrics in metrics.values():
             part_metrics['score'] = score_sign * part_metrics[score_key]
             part_metrics['score2'] = part_metrics[score_key_2]
@@ -381,6 +384,8 @@ def transform_dataset(
     cache_dir: Optional[Path],
     nan_mask: Optional
 ) -> Dataset:
+    # 在build_dataset中调用
+
     # WARNING: the order of transformations matters. Moreover, the current
     # implementation is not ideal in that sense.
     cache_dir = None
@@ -453,7 +458,11 @@ def build_dataset(
     path: Union[str, Path], transformations: Transformations, cache: bool,  cat_mask_dict
 ) -> Dataset:
     path = Path(path)
+    
+    # 此处需要使用info.json文件
     dataset = Dataset.from_dir(path)
+
+    # 此处与y_info有关
     return transform_dataset(dataset, transformations, path if cache else None, cat_mask_dict)
 
 
@@ -462,10 +471,28 @@ def prepare_tensors(
 ) -> tuple[Optional[TensorDict], Optional[TensorDict], TensorDict]:
     if isinstance(device, str):
         device = torch.device(device)
-    X_num, X_cat, Y = (
-        None if x is None else {k: torch.as_tensor(v) for k, v in x.items()}
-        for x in [dataset.X_num, dataset.X_cat, dataset.y]
-    )
+    # 原
+    # X_num, X_cat, Y = (
+    #     None if x is None else {k: torch.as_tensor(v) for k, v in x.items()}
+    #     for x in [dataset.X_num, dataset.X_cat, dataset.y]
+    # )
+        
+    """
+    lzy begin
+    转换dtype
+    """
+    X_num = None if dataset.X_num is None else {k: torch.as_tensor(v, dtype=torch.float32) for k, v in dataset.X_num.items()}
+    X_cat = None if dataset.X_cat is None else {k: torch.as_tensor(v, dtype=torch.int64) for k, v in dataset.X_cat.items()}
+    
+    if dataset.is_regression:
+        Y = {k: torch.as_tensor(v, dtype=torch.float32) for k, v in dataset.y.items()}
+    else:
+        Y = {k: torch.as_tensor(v, dtype=torch.int64) for k, v in dataset.y.items()}
+    
+    """
+    lzy end
+    """
+    
     if device.type != 'cpu':
         X_num, X_cat, Y = (
             None if x is None else {k: v.to(device) for k, v in x.items()}

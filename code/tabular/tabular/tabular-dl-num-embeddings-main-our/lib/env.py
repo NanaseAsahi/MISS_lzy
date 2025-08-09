@@ -3,7 +3,10 @@ import os
 import shutil
 import typing as ty
 from pathlib import Path
-os.environ['PROJECT_DIR'] = "/data/lsw/tabular/tabular-dl-num-embeddings-main-our"
+
+# os.environ['PROJECT_DIR'] = "/data/lsw/tabular/tabular-dl-num-embeddings-main-our"
+os.environ['PROJECT_DIR'] = "/home/lzy/data/MISS2/code/tabular/tabular/tabular-dl-num-embeddings-main-our"
+
 PROJ = Path(os.environ['PROJECT_DIR']).absolute().resolve()
 EXP = PROJ / 'exp'
 DATA = PROJ / 'data'

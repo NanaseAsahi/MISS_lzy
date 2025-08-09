@@ -103,6 +103,7 @@ def pack_config(config: RawConfig) -> RawConfig:
 
 def load_config(path: Union[Path, str]) -> Any:
     with open(path, 'rb') as f:
+        #将toml文件解析为字典
         return unpack_config(tomli.load(f))
 
 
@@ -184,7 +185,7 @@ def load_checkpoint(path: Path, *args, **kwargs) -> dict[str, np.ndarray]:
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         # assert os.environ.get('CUDA_VISIBLE_DEVICES') is not None
-        return torch.device('cuda:0')
+        return torch.device('cuda:0')  # by lzy
     else:
         return torch.device('cpu')
 
@@ -199,10 +200,27 @@ def start(
     patch_raw_config: Optional[Callable[[RawConfig], None]] = None,
     config_path: str = None,
 ) -> tuple[T, Path, Report]:  # config  # output dir  # report
+    """
+    初始化程序运行环境，处理配置文件和命令行参数。
+    
+    Args:
+        config_cls: 配置类，默认为RawConfig，指定配置数据的类型
+        argv: 命令行参数列表，如果为None则使用系统argv
+        patch_raw_config: 可选的回调函数，用于修改原始配置
+        config_path: 配置文件路径，如果提供则覆盖命令行参数中的配置路径
+        
+    Returns:
+        三元组，包含(配置对象, 输出目录路径, 报告对象)
+    """
+
+    # 解析命令行参数
     parser = argparse.ArgumentParser()
     parser.add_argument('config', metavar='FILE')
-    parser.add_argument('--force', action='store_true')
+    parser.add_argument('--force', action='store_true')  # 若--force 则 args.forch=True
     parser.add_argument('--continue', action='store_true', dest='continue_')
+
+    # 因为之后的代码，可能被覆盖
+    # 当argv为None时，通过脚本/命令行参数获取args
     if argv is None:
         program = __main__.__file__
         args = parser.parse_args()
@@ -217,28 +235,36 @@ def start(
                 ' the project root) to the script/notebook.'
             )
             raise
-    args = parser.parse_args(argv)
+    
+    # 此处会覆盖之前的处理结果，可能存在问题
+    args = parser.parse_args(argv)  
     args.config = config_path
+
+    # 断点续练
     snapshot_dir = os.environ.get('SNAPSHOT_PATH')
     if snapshot_dir and Path(snapshot_dir).joinpath('CHECKPOINTS_RESTORED').exists():
-        assert args.continue_
+        assert args.continue_  # 注意dest
 
-    config_path = env.get_path(args.config)
-    output_dir = config_path.with_suffix('')
+    config_path = env.get_path(args.config)  # 解析配置文件路径
+    output_dir = config_path.with_suffix('')  # 取出扩展名
     _print_sep('=')
     print(f'[output] {output_dir}')
     _print_sep('=')
 
-    assert config_path.exists()
-    raw_config = load_config(config_path)
+    assert config_path.exists()  # 保证config文件存在
+    raw_config = load_config(config_path) # 将toml解析为字典
+
     if patch_raw_config is not None:
-        patch_raw_config(raw_config)
+        patch_raw_config(raw_config)  # 如果提供了patch_raw_config函数，则调用它来修改原始配置
+
     if is_dataclass(config_cls):
         config = from_dict(config_cls, raw_config)
         full_raw_config = asdict(config)
     else:
         assert config_cls is dict
         full_raw_config = config = raw_config
+
+    # 可能冗余
     full_raw_config = asdict(config)
 
     if output_dir.exists():
@@ -281,6 +307,8 @@ def start(
     _print_sep('-')
     pprint(full_raw_config, width=100)
     _print_sep('-')
+
+    # cast(type, val) : 让类型检查器将val视为type类型
     return cast(config_cls, config), output_dir, report
 
 

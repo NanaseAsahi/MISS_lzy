@@ -2,11 +2,11 @@ seed = 0
 
 [data]
 T_cache = true
-dataset = "News"
-type = "mnar_p_"
+dataset = "gas"
+type = "mar_"
 missingrate = 0.5
-ipsnum = 40
-path = "data/News/mnar_p_0.5"
+ipsnum = 20
+path = "data/gas/mar_0.5"
 
 [data.T]
 normalization = "quantile"
