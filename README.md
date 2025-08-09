@@ -1,6 +1,6 @@
 # Title: MISS: An Incomplete Tabular Data Representation System with Missing Mechanism Learning
 
-***Note that this project was edited by lzy at 2025.07-2025.08 during lzy was at ZJU***
+***Note that this project was edited by lzy from July to August 2025, during which lzy was at ZJU***
 
 ## Introduction
 
