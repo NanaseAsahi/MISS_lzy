@@ -793,7 +793,8 @@ def pretrain_module(model, x: Tensor, ips, mask):
 
 
 missingrates = [0.1, 0.3, 0.5, 0.7, 0.9]
-datasets = ["HI", "News", "temperature", "gas"]
+# datasets = ["HI", "News", "temperature", "gas"]
+datasets = ["HI", "temperature"]
 missingtypes = ["mcar_", "mar_p_", "mnar_p_"]
 # missingtypes = ["mnar_p_"]
 ips_nums = [40]

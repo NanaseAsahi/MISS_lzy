@@ -6,6 +6,7 @@ import numpy as np
 
 path = Path('/home/lzy/data/MISS2/result')
 json_files = list(path.glob('*.json'))
+json_files = [f for f in json_files if 'stats' not in str(f)]  # 不需要对stats文件进行处理
 
 # print(json_files)
 
@@ -27,8 +28,12 @@ for json_file in json_files:
                 stats_json[dataset][missingrate][type] = {}
                 stats_json[dataset][missingrate][type]['all_auroc'] = []
                 stats_json[dataset][missingrate][type]['all_accuracy'] = []
+                stats_json[dataset][missingrate][type]['all_time'] = []
                 stats_json[dataset][missingrate][type]['stats_auroc'] = 0.0
                 stats_json[dataset][missingrate][type]['stats_accuracy'] = 0.0
+                stats_json[dataset][missingrate][type]['stats_time'] = 0.0
+
+                
 
 
     for item in data:
@@ -36,25 +41,29 @@ for json_file in json_files:
         missingrate = item['missingrate']
         type = item['type']
 
+        time = item['time']
         auroc = item['best_test_auroc']
         accuracy = item['best_test_accuracy']
         stats_json[dataset][missingrate][type]['all_auroc'].append(auroc)
         stats_json[dataset][missingrate][type]['all_accuracy'].append(accuracy)
+        stats_json[dataset][missingrate][type]['all_time'].append(time)
 
     for dataset in stats_json:
         for missingrate in stats_json[dataset]:
             for type in stats_json[dataset][missingrate]:
                 auroc_list = stats_json[dataset][missingrate][type]['all_auroc']
                 accuracy_list = stats_json[dataset][missingrate][type]['all_accuracy']
+                time_list = stats_json[dataset][missingrate][type]['all_time']
                     
                 stats_json[dataset][missingrate][type]['stats_auroc'] = np.mean(auroc_list) if auroc_list else 0.0
                 stats_json[dataset][missingrate][type]['stats_accuracy'] = np.mean(accuracy_list) if accuracy_list else 0.0
+                stats_json[dataset][missingrate][type]['stats_time'] = np.mean(time_list) if time_list else 0.0
             
-output_file = path / f'{file_name}_stats.json'
-with open(output_file, 'w', encoding='utf-8') as f:
-    json.dump(stats_json, f, indent=4, ensure_ascii=False)
+    output_file = path / f'{file_name}_stats.json'
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(stats_json, f, indent=4, ensure_ascii=False)
 
-print('Success!')
+    print('Success!')
         
 
 
