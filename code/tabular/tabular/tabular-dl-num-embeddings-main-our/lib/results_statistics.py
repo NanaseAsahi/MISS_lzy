@@ -44,7 +44,8 @@ for json_file in json_files:
         time = item['time']
         auroc = item['best_test_auroc']
         accuracy = item['best_test_accuracy']
-        stats_json[dataset][missingrate][type]['all_auroc'].append(auroc)
+        if auroc > 0:
+            stats_json[dataset][missingrate][type]['all_auroc'].append(auroc)
         stats_json[dataset][missingrate][type]['all_accuracy'].append(accuracy)
         stats_json[dataset][missingrate][type]['all_time'].append(time)
 
