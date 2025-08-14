@@ -867,10 +867,9 @@ if __name__ == "__main__":
                                 "/home/lzy/data/MISS2/dataset/" + C.data.dataset + "/" + C.data.type + C.data.dataset + "_" + str(
                                     C.data.missingrate) + ".csv")
                             
-                            random.seed(0)
-                            np.random.seed(0)
-                            
-                            # 获取设备
+                            # 使用当前循环的seed确保一致性
+                            random.seed(seed)
+                            np.random.seed(seed)
                             zero.improve_reproducibility(seed)
                             device = lib.get_device()
 
@@ -899,6 +898,11 @@ if __name__ == "__main__":
                             cat_idxs = list(np.where(np.array(categorical_indicator) == True)[0])
                             con_idxs = list(set(range(len(X.columns))) - set(cat_idxs))
                             
+                            """
+                            首次对数据进行读取和划分
+
+                            datafull 与 datamiss
+                            """
                             # 为所有样本生成一个标注
                             X["Set"] = np.random.choice(["train", "valid", "test"], p=[.8, .1, .1], size=(X.shape[0],))
 
@@ -930,10 +934,9 @@ if __name__ == "__main__":
                                                  'test': num_nan_mask[test_index, :]}
                             cat_nan_mask_dict = {'train': cat_nan_mask[train_index, :], 'val': cat_nan_mask[valid_index, :],
                                                  'test': cat_nan_mask[test_index, :]}
-                            # %%
-                            # %%
-                            # 构建数据集对象 D，包含特征、标签等
-                            D = lib.build_dataset(C.data.path, C.data.T, C.data.T_cache, cat_nan_mask_dict)
+                            # 构建数据集对象 D，使用对应seed的数据路径 edited by lzy 8.14
+                            seed_data_path = C.data.path + f"/seed_{seed}"
+                            D = lib.build_dataset(seed_data_path, C.data.T, C.data.T_cache, cat_nan_mask_dict)
                             
                             """
                             lzy begin
@@ -941,7 +944,7 @@ if __name__ == "__main__":
                             对划分方式进行修正
                             """
                             # 检查并修正索引一致性问题
-                            for part in ['train', 'test', 'val']:
+                            for part in ['train', 'val', 'test']:
                                 expected_size = D.size(part)
                                 actual_size = len(num_nan_mask_dict[part])
                                 
