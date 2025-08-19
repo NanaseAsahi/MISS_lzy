@@ -410,11 +410,23 @@ class ModelComparator:
     
     def plot_comparison_results(self, results, save_path=None):
         """绘制模型对比结果"""
-        # 现代化配色方案
+        if save_path:
+            base_name = save_path.replace('.png', '')
+            comparison_path = f"{base_name}_comparison.png"
+            individual_path = f"{base_name}_individual.png"
+        else:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            comparison_path = f"model_comparison_{timestamp}.png"
+            individual_path = f"model_individual_{timestamp}.png"
+        
+        self.plot_models_comparison(results, comparison_path)
+        self.plot_individual_performance(results, individual_path)
+    
+    def plot_models_comparison(self, results, save_path=None):
         colors = {
-            'mlp': '#3498DB',      # 蓝色
-            'xgb': '#E74C3C',      # 红色  
-            'lr': '#2ECC71'        # 绿色
+            'mlp': '#3498DB',
+            'xgb': '#E74C3C',
+            'lr': '#2ECC71'
         }
         
         model_names = {
@@ -423,15 +435,12 @@ class ModelComparator:
             'lr': 'Logistic Regression'
         }
         
-        # 创建图形
-        fig = plt.figure(figsize=(20, 12))
+        fig = plt.figure(figsize=(15, 10))
         fig.suptitle('Model Performance Comparison: MLP vs XGBoost vs Logistic Regression', 
-                     fontsize=24, fontweight='bold', y=0.98)
+                     fontsize=20, fontweight='bold', y=0.95)
         
         x = [r['num_features'] for r in results]
-        
-        # 子图1: 测试准确率对比
-        ax1 = plt.subplot(2, 3, 1)
+        ax1 = plt.subplot(2, 2, 1)
         for model in ['mlp', 'xgb', 'lr']:
             test_acc_mean = [r[f'{model}_test_acc_mean'] for r in results]
             test_acc_std = [r[f'{model}_test_acc_std'] for r in results]
@@ -439,16 +448,15 @@ class ModelComparator:
                         marker='o', markersize=8, linewidth=3, capsize=6,
                         label=model_names[model], color=colors[model], alpha=0.9)
         
-        ax1.set_xlabel('Number of Features', fontsize=14, fontweight='bold')
-        ax1.set_ylabel('Test Accuracy', fontsize=14, fontweight='bold')
-        ax1.set_title('Test Accuracy vs Number of Features', fontsize=16, fontweight='bold', pad=20)
-        ax1.legend(fontsize=12, frameon=True, fancybox=True, shadow=True)
+        ax1.set_xlabel('Number of Features', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Test Accuracy', fontsize=12, fontweight='bold')
+        ax1.set_title('Test Accuracy vs Number of Features', fontsize=14, fontweight='bold', pad=15)
+        ax1.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
         ax1.grid(True, alpha=0.3, linestyle='--')
         ax1.spines['top'].set_visible(False)
         ax1.spines['right'].set_visible(False)
         
-        # 子图2: AUC对比 (如果是二分类)
-        ax2 = plt.subplot(2, 3, 2)
+        ax2 = plt.subplot(2, 2, 2)
         if self.num_classes == 2:
             for model in ['mlp', 'xgb', 'lr']:
                 test_auc_mean = [r[f'{model}_test_auc_mean'] for r in results]
@@ -456,8 +464,8 @@ class ModelComparator:
                 ax2.errorbar(x, test_auc_mean, yerr=test_auc_std,
                             marker='s', markersize=8, linewidth=3, capsize=6,
                             label=model_names[model], color=colors[model], alpha=0.9)
-            ax2.set_ylabel('Test AUC', fontsize=14, fontweight='bold')
-            ax2.set_title('AUC vs Number of Features', fontsize=16, fontweight='bold', pad=20)
+            ax2.set_ylabel('Test AUC', fontsize=12, fontweight='bold')
+            ax2.set_title('Test AUC vs Number of Features', fontsize=14, fontweight='bold', pad=15)
         else:
             for model in ['mlp', 'xgb', 'lr']:
                 test_f1_mean = [r[f'{model}_test_f1_mean'] for r in results]
@@ -465,65 +473,33 @@ class ModelComparator:
                 ax2.errorbar(x, test_f1_mean, yerr=test_f1_std,
                             marker='s', markersize=8, linewidth=3, capsize=6,
                             label=model_names[model], color=colors[model], alpha=0.9)
-            ax2.set_ylabel('Test F1 Score', fontsize=14, fontweight='bold')
-            ax2.set_title('F1 Score vs Number of Features', fontsize=16, fontweight='bold', pad=20)
+            ax2.set_ylabel('Test F1 Score', fontsize=12, fontweight='bold')
+            ax2.set_title('F1 Score vs Number of Features', fontsize=14, fontweight='bold', pad=15)
         
-        ax2.set_xlabel('Number of Features', fontsize=14, fontweight='bold')
-        ax2.legend(fontsize=12, frameon=True, fancybox=True, shadow=True)
+        ax2.set_xlabel('Number of Features', fontsize=12, fontweight='bold')
+        ax2.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
         ax2.grid(True, alpha=0.3, linestyle='--')
         ax2.spines['top'].set_visible(False)
         ax2.spines['right'].set_visible(False)
         
-        # 子图3: 验证集 vs 测试集 (MLP)
-        ax3 = plt.subplot(2, 3, 3)
-        mlp_val_acc = [r['mlp_val_acc_mean'] for r in results]
-        mlp_test_acc = [r['mlp_test_acc_mean'] for r in results]
-        ax3.plot(x, mlp_val_acc, marker='o', linewidth=3, markersize=8, 
-                color='#3498DB', label='Validation', alpha=0.9)
-        ax3.plot(x, mlp_test_acc, marker='s', linewidth=3, markersize=8,
-                color='#E74C3C', label='Test', alpha=0.9)
-        ax3.set_xlabel('Number of Features', fontsize=14, fontweight='bold')
-        ax3.set_ylabel('Accuracy', fontsize=14, fontweight='bold')
-        ax3.set_title('MLP: Validation vs Test Accuracy', fontsize=16, fontweight='bold', pad=20)
-        ax3.legend(fontsize=12, frameon=True, fancybox=True, shadow=True)
+        ax3 = plt.subplot(2, 2, 3)
+        for model in ['mlp', 'xgb', 'lr']:
+            val_acc = [r[f'{model}_val_acc_mean'] for r in results]
+            test_acc = [r[f'{model}_test_acc_mean'] for r in results]
+            ax3.plot(x, val_acc, marker='o', linewidth=2, markersize=6, 
+                    color=colors[model], label=f'{model_names[model]} (Val)', alpha=0.7, linestyle='--')
+            ax3.plot(x, test_acc, marker='s', linewidth=3, markersize=6,
+                    color=colors[model], label=f'{model_names[model]} (Test)', alpha=0.9)
+        
+        ax3.set_xlabel('Number of Features', fontsize=12, fontweight='bold')
+        ax3.set_ylabel('Accuracy', fontsize=12, fontweight='bold')
+        ax3.set_title('Validation vs Test Accuracy', fontsize=14, fontweight='bold', pad=15)
+        ax3.legend(fontsize=9, frameon=True, fancybox=True, shadow=True, ncol=2)
         ax3.grid(True, alpha=0.3, linestyle='--')
         ax3.spines['top'].set_visible(False)
         ax3.spines['right'].set_visible(False)
         
-        # 子图4: 验证集 vs 测试集 (XGBoost)
-        ax4 = plt.subplot(2, 3, 4)
-        xgb_val_acc = [r['xgb_val_acc_mean'] for r in results]
-        xgb_test_acc = [r['xgb_test_acc_mean'] for r in results]
-        ax4.plot(x, xgb_val_acc, marker='o', linewidth=3, markersize=8,
-                color='#3498DB', label='Validation', alpha=0.9)
-        ax4.plot(x, xgb_test_acc, marker='s', linewidth=3, markersize=8,
-                color='#E74C3C', label='Test', alpha=0.9)
-        ax4.set_xlabel('Number of Features', fontsize=14, fontweight='bold')
-        ax4.set_ylabel('Accuracy', fontsize=14, fontweight='bold')
-        ax4.set_title('XGBoost: Validation vs Test Accuracy', fontsize=16, fontweight='bold', pad=20)
-        ax4.legend(fontsize=12, frameon=True, fancybox=True, shadow=True)
-        ax4.grid(True, alpha=0.3, linestyle='--')
-        ax4.spines['top'].set_visible(False)
-        ax4.spines['right'].set_visible(False)
-        
-        # 子图5: 验证集 vs 测试集 (Logistic Regression)
-        ax5 = plt.subplot(2, 3, 5)
-        lr_val_acc = [r['lr_val_acc_mean'] for r in results]
-        lr_test_acc = [r['lr_test_acc_mean'] for r in results]
-        ax5.plot(x, lr_val_acc, marker='o', linewidth=3, markersize=8,
-                color='#3498DB', label='Validation', alpha=0.9)
-        ax5.plot(x, lr_test_acc, marker='s', linewidth=3, markersize=8,
-                color='#E74C3C', label='Test', alpha=0.9)
-        ax5.set_xlabel('Number of Features', fontsize=14, fontweight='bold')
-        ax5.set_ylabel('Accuracy', fontsize=14, fontweight='bold')
-        ax5.set_title('Logistic Regression: Validation vs Test Accuracy', fontsize=16, fontweight='bold', pad=20)
-        ax5.legend(fontsize=12, frameon=True, fancybox=True, shadow=True)
-        ax5.grid(True, alpha=0.3, linestyle='--')
-        ax5.spines['top'].set_visible(False)
-        ax5.spines['right'].set_visible(False)
-        
-        # 子图6: 性能排名统计
-        ax6 = plt.subplot(2, 3, 6)
+        ax4 = plt.subplot(2, 2, 4)
         win_counts = {'MLP': 0, 'XGBoost': 0, 'LogReg': 0}
         for r in results:
             test_accs = {
@@ -536,28 +512,100 @@ class ModelComparator:
         
         model_names_short = list(win_counts.keys())
         counts = list(win_counts.values())
-        bars = ax6.bar(model_names_short, counts, 
+        bars = ax4.bar(model_names_short, counts, 
                       color=[colors['mlp'], colors['xgb'], colors['lr']], 
                       alpha=0.8, edgecolor='white', linewidth=2)
         
-        # 添加数值标签
         for bar, count in zip(bars, counts):
             height = bar.get_height()
-            ax6.text(bar.get_x() + bar.get_width()/2., height + 0.5,
-                    f'{count}', ha='center', va='bottom', fontsize=14, fontweight='bold')
+            ax4.text(bar.get_x() + bar.get_width()/2., height + 0.1,
+                    f'{count}', ha='center', va='bottom', fontsize=12, fontweight='bold')
         
-        ax6.set_ylabel('Number of Wins', fontsize=14, fontweight='bold')
-        ax6.set_title('Best Model Count', fontsize=16, fontweight='bold', pad=20)
-        ax6.grid(True, alpha=0.3, linestyle='--', axis='y')
-        ax6.spines['top'].set_visible(False)
-        ax6.spines['right'].set_visible(False)
+        ax4.set_ylabel('Number of Wins', fontsize=12, fontweight='bold')
+        ax4.set_title('Best Model Count', fontsize=14, fontweight='bold', pad=15)
+        ax4.grid(True, alpha=0.3, linestyle='--', axis='y')
+        ax4.spines['top'].set_visible(False)
+        ax4.spines['right'].set_visible(False)
         
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.tight_layout(rect=[0, 0.03, 1, 0.92])
         
         if save_path:
             plt.savefig(save_path, dpi=300, bbox_inches='tight', 
                        facecolor='white', edgecolor='none')
-            print(f"📊 图表已保存到: {save_path}")
+            print(f"📊 模型对比图已保存到: {save_path}")
+        
+        plt.show()
+    
+    def plot_individual_performance(self, results, save_path=None):
+        individual_colors = {
+            'mlp': '#9B59B6',
+            'xgb': '#F39C12',
+            'lr': '#1ABC9C'
+        }
+        
+        model_names = {
+            'mlp': 'MLP',
+            'xgb': 'XGBoost', 
+            'lr': 'Logistic Regression'
+        }
+        
+        fig = plt.figure(figsize=(18, 12))
+        fig.suptitle('Individual Model Performance Analysis', 
+                     fontsize=20, fontweight='bold', y=0.95)
+        
+        x = [r['num_features'] for r in results]
+        model_keys = ['mlp', 'xgb', 'lr']
+        
+        for i, model in enumerate(model_keys):
+            ax1 = plt.subplot(3, 2, i*2 + 1)
+            val_acc = [r[f'{model}_val_acc_mean'] for r in results]
+            test_acc = [r[f'{model}_test_acc_mean'] for r in results]
+            val_std = [r[f'{model}_val_acc_std'] for r in results]
+            test_std = [r[f'{model}_test_acc_std'] for r in results]
+            
+            ax1.errorbar(x, val_acc, yerr=val_std, marker='o', linewidth=3, markersize=8, 
+                        color=individual_colors[model], label='Validation', alpha=0.7, 
+                        linestyle='--', capsize=4)
+            ax1.errorbar(x, test_acc, yerr=test_std, marker='s', linewidth=3, markersize=8,
+                        color=individual_colors[model], label='Test', alpha=0.9, capsize=4)
+            
+            ax1.set_xlabel('Number of Features', fontsize=12, fontweight='bold')
+            ax1.set_ylabel('Accuracy', fontsize=12, fontweight='bold')
+            ax1.set_title(f'{model_names[model]}', fontsize=14, fontweight='bold', pad=15)
+            ax1.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
+            ax1.grid(True, alpha=0.3, linestyle='--')
+            ax1.spines['top'].set_visible(False)
+            ax1.spines['right'].set_visible(False)
+            
+            ax2 = plt.subplot(3, 2, i*2 + 2)
+            
+            test_acc_data = [r[f'{model}_test_acc_mean'] for r in results]
+            test_f1_data = [r[f'{model}_test_f1_mean'] for r in results]
+            
+            ax2.plot(x, test_acc_data, marker='o', linewidth=3, markersize=8,
+                    color=individual_colors[model], label='Accuracy', alpha=0.9)
+            ax2.plot(x, test_f1_data, marker='s', linewidth=3, markersize=8,
+                    color=individual_colors[model], label='F1 Score', alpha=0.7, linestyle='--')
+            
+            if self.num_classes == 2:
+                test_auc_data = [r[f'{model}_test_auc_mean'] for r in results]
+                ax2.plot(x, test_auc_data, marker='^', linewidth=3, markersize=8,
+                        color=individual_colors[model], label='AUC', alpha=0.8, linestyle=':')
+            
+            ax2.set_xlabel('Number of Features', fontsize=12, fontweight='bold')
+            ax2.set_ylabel('Score', fontsize=12, fontweight='bold')
+            ax2.set_title(f'{model_names[model]} - Multiple Metrics', fontsize=14, fontweight='bold', pad=15)
+            ax2.legend(fontsize=10, frameon=True, fancybox=True, shadow=True)
+            ax2.grid(True, alpha=0.3, linestyle='--')
+            ax2.spines['top'].set_visible(False)
+            ax2.spines['right'].set_visible(False)
+        
+        plt.tight_layout(rect=[0, 0.03, 1, 0.92])
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight', 
+                       facecolor='white', edgecolor='none')
+            print(f"📊 单独性能图已保存到: {save_path}")
         
         plt.show()
     
@@ -566,8 +614,6 @@ class ModelComparator:
         print("\n" + "="*80)
         print("🏆 模型性能对比总结")
         print("="*80)
-        
-        # 找到每个模型的最佳性能
         best_performances = {}
         for model in ['mlp', 'xgb', 'lr']:
             model_results = []
@@ -582,7 +628,6 @@ class ModelComparator:
             best_result = max(model_results, key=lambda x: x['test_acc'])
             best_performances[model] = best_result
         
-        # 输出每个模型的最佳性能
         model_names = {'mlp': 'MLP', 'xgb': 'XGBoost', 'lr': 'Logistic Regression'}
         
         for model, name in model_names.items():
@@ -593,13 +638,11 @@ class ModelComparator:
                 print(f"   最佳AUC: {best['test_auc']:.4f}")
             print(f"   最佳F1分数: {best['test_f1']:.4f}")
         
-        # 整体最佳模型
         overall_best = max(best_performances.items(), key=lambda x: x[1]['test_acc'])
         print(f"\n🏆 整体最佳模型: {model_names[overall_best[0]]}")
         print(f"   准确率: {overall_best[1]['test_acc']:.4f}")
         print(f"   特征数: {overall_best[1]['num_features']}")
         
-        # 胜负统计
         print(f"\n📊 胜负统计:")
         win_counts = {'mlp': 0, 'xgb': 0, 'lr': 0}
         for r in results:
@@ -620,12 +663,10 @@ class ModelComparator:
         """保存实验结果"""
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         
-        # 保存CSV
         csv_path = f"{filename_prefix}_{timestamp}.csv"
         df = pd.DataFrame(results)
         df.to_csv(csv_path, index=False)
         
-        # 保存JSON
         json_path = f"{filename_prefix}_{timestamp}.json"
         save_data = {
             'experiment_info': {
@@ -648,25 +689,18 @@ class ModelComparator:
         return csv_path, json_path
 
 def main():
-    """主函数"""
-    # 配置参数
     data_path = "/root/autodl-tmp/MISS_lzy/dataset/HI/mcar_HI_0.1.csv"
     
-    # 🚀 快速测试配置 (推荐用于初次测试)
-    max_features = None   # 测试所有特征 (根据您的要求)
-    step = 1              # 从1到所有特征，每个都测试
-    num_repeats = 1       # 重复次数
+    max_features = None
+    step = 1
+    num_repeats = 1
     
     print("🔬 模型性能对比: MLP vs XGBoost vs Logistic Regression")
     print("="*70)
     
-    # 创建对比器
     comparator = ModelComparator(data_path)
-    
-    # 加载数据
     comparator.load_and_preprocess_data()
     
-    # 运行对比实验
     start_time = time.time()
     results = comparator.run_comparison_experiment(
         max_features=max_features,
@@ -677,15 +711,14 @@ def main():
     
     print(f"\n⏱️  实验完成，耗时: {end_time - start_time:.2f} 秒")
     
-    # 保存结果
     csv_path, json_path = comparator.save_results(results)
     
-    # 绘制结果
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    plot_path = f"model_comparison_{timestamp}.png"
-    comparator.plot_comparison_results(results, plot_path)
+    comparison_plot_path = f"model_comparison_{timestamp}.png"
+    individual_plot_path = f"model_individual_{timestamp}.png"
     
-    # 打印总结
+    comparator.plot_models_comparison(results, comparison_plot_path)
+    comparator.plot_individual_performance(results, individual_plot_path)
     comparator.print_summary(results)
 
 if __name__ == "__main__":
