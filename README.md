@@ -2,6 +2,26 @@
 
 ***Note that this project was edited by lzy from July to August 2025, during which lzy was at ZJU***
 
+## Updated by lzy
+- requirements.txt
+- README.md
+- scripts/tabular.sh
+- data
+- dataset
+- result
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/train4.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/train6_lzy.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/rtdl_our.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/model_comparison.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/IPS.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/lib/results_statistics.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/lib/make_info_json.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/lib/make_divided_npy.py
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/exp/transformer-q-lr/HI
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/exp/transformer-q-lr/News
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/exp/transformer-q-lr/temperature
+- code/tabular/tabular/tabular-dl-num-embeddings-main-our/exp/transformer-q-lr/gas
+
 ## Introduction
 
 This folder (i.e., ./code) holds the source codes of the proposed system MISS on top of the four transformer-based models, including
